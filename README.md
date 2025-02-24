@@ -1,9 +1,9 @@
 # Designing Ubiquitous and Interactive Computing Devices
 
-This repository contains code, writeups, and resources for ubiquitous computing assignments.
+This repository contains the code, writeups, and resources for all INFO5342 assignments.
 
 ## 1. Litter Box Telltale
-A small, self-contained device designed to track a cat’s litter box activity. Mounted inside or near a covered litter box, the device uses sensors to detect motion, log bathroom sessions, and display usage information, providing real-time feedback about the litter box’s status and reminding owners when it’s time to clean.
+A device that uses motion sensors to detect and track activity in a cat’s litter box to provide owners with insights about their cat’s health. Mounted on the inside of a litter box, it is non-invasive and displays real-time information to owners including litter box status, activity, and cleanliness.
 
 Materials:
 - Adafruit Clue board
