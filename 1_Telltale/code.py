@@ -12,6 +12,7 @@ display.auto_refresh = False  # Prevent flickering
 
 # **Create display groups**
 text_group = displayio.Group()
+image_group = displayio.Group()
 
 # **Background Color (Dark Blue)**
 background = displayio.Bitmap(display.width, display.height, 1)
@@ -43,21 +44,21 @@ uses_label = label.Label(terminalio.FONT, text="Uses: --/5", scale=2, color=0xFF
 uses_label.anchor_point = (0.5, 0)
 uses_label.anchored_position = (display.width // 2, 170)
 
-# **Progress Bar**
-progress_width = 100  
-progress_bar = displayio.Bitmap(progress_width, 10, 2)
-progress_palette = displayio.Palette(2)
-progress_palette[0] = 0x444444  # Dark gray (empty)
-progress_palette[1] = 0x00FF00  # Green (filled)
-progress_sprite = displayio.TileGrid(progress_bar, pixel_shader=progress_palette, x=(display.width // 2) - 50, y=200)
-
 # **Add Elements to Display Group**
 text_group.append(title_label)
 text_group.append(status_label)
 text_group.append(last_session_label)
 text_group.append(time_since_label)
 text_group.append(uses_label)
-text_group.append(progress_sprite)
+
+# **Load Clean & Dirty Images**
+try:
+    clean_bitmap = displayio.OnDiskBitmap("/clean.bmp")
+    dirty_bitmap = displayio.OnDiskBitmap("/dirty.bmp")
+    image_view = displayio.TileGrid(clean_bitmap, pixel_shader=clean_bitmap.pixel_shader)
+    image_group.append(image_view)
+except Exception as e:
+    print(f"❌ ERROR: BMP loading failed - {e}")
 
 # **Set initial display state**
 display.root_group = text_group
@@ -86,8 +87,9 @@ last_session_end_time = time.monotonic()
 total_sessions = 0
 movement_detected = False
 stillness_counter = 0
+current_mode = "summary"  # Default view mode
 waiting_for_stillness = False
-stopwatch_time = 0  
+stopwatch_time = 0
 
 print("📏 Measuring initial baseline... Keep the box completely still.")
 time.sleep(3)
@@ -113,21 +115,27 @@ def format_time(seconds):
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
 
-# **Update Progress Bar**
-def update_progress_bar():
-    progress_bar.fill(0)  
-    filled_width = int((total_sessions / MAX_SESSIONS_BEFORE_CLEAN) * progress_width)
-    for x in range(filled_width):
-        progress_bar[x, 0] = 1  
-
 # **Update Summary Screen**
 def update_summary():
     last_session_label.text = f"Last: {format_time(last_session_duration)}"
     time_since_label.text = f"Since: {format_time(time_since_last_session)}"
     uses_label.text = f"Uses: {total_sessions}/5"
 
-    update_progress_bar()
     display.root_group = text_group
+    display.refresh()
+
+# **Function to Update Clean/Dirty Image**
+def update_image():
+    while len(image_group) > 0:
+        image_group.pop()
+
+    new_image = displayio.TileGrid(
+        clean_bitmap if total_sessions < 5 else dirty_bitmap,
+        pixel_shader=clean_bitmap.pixel_shader,
+    )
+
+    image_group.append(new_image)
+    display.root_group = image_group
     display.refresh()
 
 # **Main Loop**
@@ -143,51 +151,47 @@ while True:
         last_movement_time = time.monotonic()
         stillness_counter = 0
         waiting_for_stillness = False  
-        status_label.text = "In Use: 0s"
-        status_label.color = 0x00FF00  
+        status_label.text = f"In Use: {format_time(0)}"
+        status_label.color = 0x00FF00  # Green
         display.refresh()
 
-    # **Update Stopwatch for "In Use"**
+    # **Update Stopwatch for 'In Use'**
     if movement_detected:
-        stopwatch_time = time.monotonic() - session_start_time
-        status_label.text = f"In Use: {format_time(stopwatch_time)}"
+        elapsed_time = time.monotonic() - session_start_time
+        status_label.text = f"In Use: {format_time(elapsed_time)}"
         display.refresh()
 
-    # **Detect Stillness After Cooldown**
+    # **Detect Stillness**
     if movement_detected and (time.monotonic() - last_movement_time) > MOVEMENT_RESET_TIME:
         if proximity_change < PROXIMITY_MOVEMENT_THRESHOLD:
-            if not waiting_for_stillness:
-                waiting_for_stillness = True
-                status_label.text = "Waiting..."
-                status_label.color = 0xFFA500  
-                display.refresh()
-
             stillness_counter += 1
             print(f"🔍 Stillness detected {stillness_counter}/{STILLNESS_CONFIRMATIONS_REQUIRED}...")
-            
             if stillness_counter >= STILLNESS_CONFIRMATIONS_REQUIRED:
                 print("✅ Litter box is now still!")
-
-                # **Finalize session details**
                 last_session_duration = time.monotonic() - session_start_time
                 time_since_last_session = time.monotonic() - last_session_end_time
                 total_sessions += 1
+                update_summary()
 
-                update_summary()  
-
-                # **Fix: Reset the Status to "Idle" After Stillness**
                 status_label.text = "Idle"
                 status_label.color = 0x0000FF  
                 display.refresh()
 
-                # **Reset for next session**
                 movement_detected = False
                 waiting_for_stillness = False
                 stillness_counter = 0
                 last_session_end_time = time.monotonic()
                 calibrate_baseline()
 
-        else:
-            stillness_counter = 0  
+    # **Button Interactions (Fix for Toggle)**
+    if clue.button_b and current_mode != "image":
+        update_image()
+        current_mode = "image"
+        time.sleep(0.5)  
+
+    if clue.button_a and current_mode != "summary":
+        update_summary()
+        current_mode = "summary"
+        time.sleep(0.5)  
 
     time.sleep(0.2)
