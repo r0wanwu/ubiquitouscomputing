@@ -44,12 +44,21 @@ uses_label = label.Label(terminalio.FONT, text="Uses: --/5", scale=2, color=0xFF
 uses_label.anchor_point = (0.5, 0)
 uses_label.anchored_position = (display.width // 2, 170)
 
+# **Progress Bar**
+progress_width = 100
+progress_bar_bitmap = displayio.Bitmap(progress_width, 10, 2)
+progress_palette = displayio.Palette(2)
+progress_palette[0] = 0x444444  # Dark gray (empty)
+progress_palette[1] = 0x00FF00  # Green (filled)
+progress_sprite = displayio.TileGrid(progress_bar_bitmap, pixel_shader=progress_palette, x=(display.width // 2) - 50, y=200)
+
 # **Add Elements to Display Group**
 text_group.append(title_label)
 text_group.append(status_label)
 text_group.append(last_session_label)
 text_group.append(time_since_label)
 text_group.append(uses_label)
+text_group.append(progress_sprite)
 
 # **Load Clean & Dirty Images**
 try:
@@ -115,12 +124,20 @@ def format_time(seconds):
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
 
+# **Update Progress Bar**
+def update_progress_bar():
+    progress_bar_bitmap.fill(0)  
+    filled_width = int((total_sessions / MAX_SESSIONS_BEFORE_CLEAN) * progress_width)
+    for x in range(filled_width):
+        progress_bar_bitmap[x, 0] = 1  
+
 # **Update Summary Screen**
 def update_summary():
     last_session_label.text = f"Last: {format_time(last_session_duration)}"
     time_since_label.text = f"Since: {format_time(time_since_last_session)}"
     uses_label.text = f"Uses: {total_sessions}/5"
 
+    update_progress_bar()
     display.root_group = text_group
     display.refresh()
 
@@ -183,15 +200,13 @@ while True:
                 last_session_end_time = time.monotonic()
                 calibrate_baseline()
 
-    # **Button Interactions (Fix for Toggle)**
-    if clue.button_b and current_mode != "image":
+    # **Button Controls for Screen Toggling**
+    if clue.button_b:
         update_image()
         current_mode = "image"
-        time.sleep(0.5)  
 
-    if clue.button_a and current_mode != "summary":
+    if clue.button_a:
         update_summary()
         current_mode = "summary"
-        time.sleep(0.5)  
 
     time.sleep(0.2)
